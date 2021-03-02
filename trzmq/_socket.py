@@ -45,18 +45,20 @@ class Socket:
             await trio.lowlevel.checkpoint()
             return
 
-        if not self._someone_is_watching_trigger:
-            self._someone_is_watching_trigger = True
-            try:
-                while not self._events & flag:
+        while not self._events & flag:
+            if not self._someone_is_watching_trigger:
+                self._someone_is_watching_trigger = True
+                try:
                     await trio.lowlevel.wait_readable(self._zmq_sock.fd)
+                finally:
+                    self._someone_is_watching_trigger = False
                     self._update_events()
-            finally:
-                self._someone_is_watching_trigger = False
-        else:
-            # Someone else is watching the socket, so we just need to
-            # wait to be woken up.
-            await self._wake_events[flag].wait()
+            else:
+                # Someone else is watching the socket, so we just need to
+                # wait to be woken up
+                await self._wake_events[flag].wait()
+                # self._events will be uptodate because if there was another
+                # sender/receiver they ran _update_events after send/receive
 
     # XX needs conflict detection
     # ...or does it? each send() call is atomic, like a DGRAM socket.
